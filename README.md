@@ -21,6 +21,20 @@ The service starts on port `3000` by default. To use another port:
 $env:PORT=4000; npm start
 ```
 
+## Cloud Run
+
+The service includes a `Dockerfile` and GitHub Actions workflow for Cloud Run. Configure these GitHub repository secrets before running `.github/workflows/deploy-cloud-run.yml`:
+
+```text
+GCP_PROJECT_ID
+GCP_REGION
+GCP_WORKLOAD_IDENTITY_PROVIDER
+GCP_SERVICE_ACCOUNT
+DATABASE_URL
+```
+
+The workflow deploys the service as `backoffice-microservice` and sets `PGSSL=true` automatically.
+
 ## PostgreSQL
 
 Set the PostgreSQL pooler connection string in `DATABASE_URL`. Keep the real password in your local environment, not in source code.

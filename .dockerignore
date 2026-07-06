@@ -1,0 +1,9 @@
+node_modules
+.env
+.git
+work
+outputs
+.agents
+.codex
+npm-debug.log
+*.log
