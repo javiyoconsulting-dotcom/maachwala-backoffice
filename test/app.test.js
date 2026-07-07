@@ -186,7 +186,7 @@ test('createddl Pub/Sub endpoint rejects messages without orgid', async () => {
 test('createddl Pub/Sub endpoint logs dispatch failures', async () => {
   const originalConsoleError = console.error;
   const logs = [];
-  console.error = (message) => logs.push(message);
+  console.error = (...args) => logs.push(args);
 
   const server = createApp({
     async dispatchTerraformPipeline() {
@@ -212,14 +212,21 @@ test('createddl Pub/Sub endpoint logs dispatch failures', async () => {
     });
 
     const body = await response.json();
-    const log = JSON.parse(logs[0]);
+    const logPrefix = 'DDL_TRIGGER_ERROR ';
+    const log = JSON.parse(logs[0][0].slice(logPrefix.length));
 
     assert.equal(response.status, 502);
     assert.equal(body.error, 'dispatch failed');
+    assert.equal(logs[0][0].startsWith(logPrefix), true);
+    assert.equal(logs[1][0] instanceof Error, true);
     assert.equal(log.message, 'Failed to process /backoffice/createddl/pubsub request');
-    assert.equal(log.error, 'dispatch failed');
-    assert.equal(log.statusCode, 502);
-    assert.equal(log.details, 'bad gateway from GitHub');
+    assert.equal(log.event, 'DDL_TRIGGER_ERROR');
+    assert.equal(log.severity, 'ERROR');
+    assert.equal(log.error.name, 'Error');
+    assert.equal(log.error.message, 'dispatch failed');
+    assert.equal(log.error.statusCode, 502);
+    assert.equal(log.error.details, 'bad gateway from GitHub');
+    assert.equal(typeof log.error.stack, 'string');
     assert.equal(log.orgid, 'org-500');
     assert.equal(log.pubsubMessageId, 'message-dispatch-failed');
   } finally {

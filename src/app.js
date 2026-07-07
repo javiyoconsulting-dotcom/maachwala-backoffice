@@ -183,6 +183,25 @@ function extractOrgId(pubSubEvent) {
   return String(orgid).trim();
 }
 
+function serializeError(error) {
+  return {
+    name: error.name,
+    message: error.message,
+    stack: error.stack,
+    code: error.code,
+    statusCode: error.statusCode || 500,
+    details: error.details,
+    cause: error.cause
+      ? {
+          name: error.cause.name,
+          message: error.cause.message,
+          stack: error.cause.stack,
+          code: error.cause.code,
+        }
+      : undefined,
+  };
+}
+
 async function handleCreateDdlPubSub(req, res, dispatchTerraformPipeline) {
   const contentType = req.headers['content-type'] || '';
   if (!contentType.includes('application/json')) {
@@ -215,18 +234,20 @@ async function handleCreateDdlPubSub(req, res, dispatchTerraformPipeline) {
       pubsubMessageId: pubSubEvent.messageId,
     });
   } catch (error) {
+    const errorLog = {
+      severity: 'ERROR',
+      event: 'DDL_TRIGGER_ERROR',
+      message: 'Failed to process /backoffice/createddl/pubsub request',
+      error: serializeError(error),
+      orgid,
+      pubsubMessageId: pubSubEvent && pubSubEvent.messageId,
+      subscription: pubSubEvent && pubSubEvent.subscription,
+    };
+
     console.error(
-      JSON.stringify({
-        message: 'Failed to process /backoffice/createddl/pubsub request',
-        error: error.message,
-        statusCode: error.statusCode || 500,
-        details: error.details,
-        orgid,
-        pubsubMessageId: pubSubEvent && pubSubEvent.messageId,
-        subscription: pubSubEvent && pubSubEvent.subscription,
-        stack: error.stack,
-      }),
+      `DDL_TRIGGER_ERROR ${JSON.stringify(errorLog)}`,
     );
+    console.error(error);
 
     sendJson(res, error.statusCode || 500, {
       error: error.statusCode ? error.message : 'Internal server error',
@@ -269,6 +290,7 @@ module.exports = {
   createApp,
   decodePubSubMessage,
   extractOrgId,
+  serializeError,
   validateOnboardOrgPayload,
   normalizeOrganizationPayload,
 };
