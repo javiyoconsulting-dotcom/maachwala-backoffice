@@ -1,6 +1,6 @@
 const assert = require('node:assert/strict');
 const test = require('node:test');
-const { createApp, validateOnboardOrgPayload } = require('../src/app');
+const { createApp, decodePubSubMessage, validateOnboardOrgPayload } = require('../src/app');
 const { mapOrganizationToContractedOrg } = require('../src/organizationRepository');
 
 function listen(server) {
@@ -95,6 +95,76 @@ test('preflight request returns CORS headers', async () => {
   } finally {
     server.close();
   }
+});
+
+test('createddl Pub/Sub endpoint triggers Terraform dispatch', async () => {
+  const dispatches = [];
+  const server = createApp({
+    async dispatchTerraformPipeline(payload) {
+      dispatches.push(payload);
+    },
+  });
+  const port = await listen(server);
+
+  try {
+    const response = await fetch(`http://localhost:${port}/backoffice/createddl/pubsub`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        message: {
+          messageId: 'message-1',
+          publishTime: '2026-07-07T00:00:00Z',
+          attributes: {
+            reason: 'createorg-ddl',
+          },
+          data: Buffer.from(JSON.stringify({ requestedBy: 'pubsub-test' })).toString('base64'),
+        },
+        subscription: 'BACKOFFICE_CREATEORG_CREATEDDL-sub',
+      }),
+    });
+
+    const body = await response.json();
+
+    assert.equal(response.status, 202);
+    assert.equal(body.message, 'Terraform DDL pipeline trigger accepted');
+    assert.deepEqual(dispatches, [
+      {
+        source: 'pubsub',
+        topic: 'BACKOFFICE_CREATEORG_CREATEDDL',
+        subscription: 'BACKOFFICE_CREATEORG_CREATEDDL-sub',
+        messageId: 'message-1',
+        publishTime: '2026-07-07T00:00:00Z',
+        attributes: {
+          reason: 'createorg-ddl',
+        },
+        data: {
+          requestedBy: 'pubsub-test',
+        },
+      },
+    ]);
+  } finally {
+    server.close();
+  }
+});
+
+test('decodes Pub/Sub message data as JSON when possible', () => {
+  const decoded = decodePubSubMessage({
+    message: {
+      message_id: 'message-2',
+      data: Buffer.from(JSON.stringify({ action: 'apply-ddl' })).toString('base64'),
+    },
+    subscription: 'BACKOFFICE_CREATEORG_CREATEDDL-sub',
+  });
+
+  assert.deepEqual(decoded, {
+    messageId: 'message-2',
+    publishTime: undefined,
+    attributes: {},
+    data: {
+      action: 'apply-ddl',
+    },
+    subscription: 'BACKOFFICE_CREATEORG_CREATEDDL-sub',
+  });
 });
 
 test('payload validation reports missing required fields', () => {

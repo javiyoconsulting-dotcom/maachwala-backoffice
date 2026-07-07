@@ -1,6 +1,9 @@
 name: Apply PostgreSQL DDL
 
 on:
+  repository_dispatch:
+    types:
+      - apply-postgresql-ddl
   pull_request:
     paths:
       - "terraform/postgresql/**"

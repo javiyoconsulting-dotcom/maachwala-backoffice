@@ -1,4 +1,5 @@
 const http = require('node:http');
+const { triggerGithubDispatch } = require('./githubDispatch');
 const { createOrganization } = require('./organizationRepository');
 
 const MAX_BODY_BYTES = 1024 * 1024;
@@ -139,8 +140,72 @@ async function handleOnboardOrg(req, res, repository) {
   }
 }
 
+function decodePubSubMessage(pubSubBody) {
+  if (!pubSubBody || typeof pubSubBody !== 'object' || Array.isArray(pubSubBody)) {
+    throw Object.assign(new Error('Pub/Sub push body must be a JSON object'), { statusCode: 400 });
+  }
+
+  if (!pubSubBody.message || typeof pubSubBody.message !== 'object') {
+    throw Object.assign(new Error('Pub/Sub message is required'), { statusCode: 400 });
+  }
+
+  const encodedData = pubSubBody.message.data;
+  let decodedData;
+
+  if (typeof encodedData === 'string' && encodedData.length > 0) {
+    const decodedText = Buffer.from(encodedData, 'base64').toString('utf8');
+
+    try {
+      decodedData = JSON.parse(decodedText);
+    } catch (error) {
+      decodedData = decodedText;
+    }
+  }
+
+  return {
+    messageId: pubSubBody.message.messageId || pubSubBody.message.message_id,
+    publishTime: pubSubBody.message.publishTime || pubSubBody.message.publish_time,
+    attributes: pubSubBody.message.attributes || {},
+    data: decodedData,
+    subscription: pubSubBody.subscription,
+  };
+}
+
+async function handleCreateDdlPubSub(req, res, dispatchTerraformPipeline) {
+  const contentType = req.headers['content-type'] || '';
+  if (!contentType.includes('application/json')) {
+    sendJson(res, 415, { error: 'Content-Type must be application/json' });
+    return;
+  }
+
+  try {
+    const payload = await readJsonBody(req);
+    const pubSubEvent = decodePubSubMessage(payload);
+
+    await dispatchTerraformPipeline({
+      source: 'pubsub',
+      topic: 'BACKOFFICE_CREATEORG_CREATEDDL',
+      subscription: pubSubEvent.subscription || 'BACKOFFICE_CREATEORG_CREATEDDL-sub',
+      messageId: pubSubEvent.messageId,
+      publishTime: pubSubEvent.publishTime,
+      attributes: pubSubEvent.attributes,
+      data: pubSubEvent.data,
+    });
+
+    sendJson(res, 202, {
+      message: 'Terraform DDL pipeline trigger accepted',
+      pubsubMessageId: pubSubEvent.messageId,
+    });
+  } catch (error) {
+    sendJson(res, error.statusCode || 500, {
+      error: error.statusCode ? error.message : 'Internal server error',
+    });
+  }
+}
+
 function createApp(options = {}) {
   const repository = options.repository || { createOrganization };
+  const dispatchTerraformPipeline = options.dispatchTerraformPipeline || triggerGithubDispatch;
 
   return http.createServer((req, res) => {
     const url = new URL(req.url, `http://${req.headers.host}`);
@@ -160,12 +225,18 @@ function createApp(options = {}) {
       return;
     }
 
+    if (req.method === 'POST' && url.pathname === '/backoffice/createddl/pubsub') {
+      handleCreateDdlPubSub(req, res, dispatchTerraformPipeline);
+      return;
+    }
+
     sendJson(res, 404, { error: 'Route not found' });
   });
 }
 
 module.exports = {
   createApp,
+  decodePubSubMessage,
   validateOnboardOrgPayload,
   normalizeOrganizationPayload,
 };

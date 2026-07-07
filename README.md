@@ -35,6 +35,54 @@ DATABASE_URL
 
 The workflow deploys the service as `backoffice-microservice` and sets `PGSSL=true` automatically.
 
+For the Pub/Sub-triggered DDL service, also configure this GitHub repository secret before Cloud Run deployment:
+
+```text
+GH_REPOSITORY_DISPATCH_TOKEN
+```
+
+The token is injected into Cloud Run as `GITHUB_DISPATCH_TOKEN` and is used only to call GitHub `repository_dispatch`.
+
+## Pub/Sub DDL Trigger
+
+Cloud Run endpoint:
+
+```text
+POST /backoffice/createddl/pubsub
+```
+
+Connect the existing Pub/Sub push subscription to the deployed Cloud Run URL:
+
+```text
+https://<cloud-run-service-url>/backoffice/createddl/pubsub
+```
+
+The Cloud Run deployment workflow updates the push endpoint for `BACKOFFICE_CREATEORG_CREATEDDL-sub` automatically after every deployment.
+
+Pub/Sub resources:
+
+```text
+Topic: BACKOFFICE_CREATEORG_CREATEDDL
+Subscription: BACKOFFICE_CREATEORG_CREATEDDL-sub
+```
+
+When a message arrives, the service triggers this GitHub Actions event:
+
+```text
+repository_dispatch: apply-postgresql-ddl
+```
+
+That starts `.github/workflows/terraform-postgresql-ddl.yml`, which runs the Terraform PostgreSQL DDL pipeline.
+
+Recommended Pub/Sub message body before base64 encoding:
+
+```json
+{
+  "reason": "createorg-ddl-requested",
+  "requestedBy": "backoffice"
+}
+```
+
 ## PostgreSQL
 
 Set the PostgreSQL pooler connection string in `DATABASE_URL`. Keep the real password in your local environment, not in source code.
