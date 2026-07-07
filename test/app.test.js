@@ -1,6 +1,7 @@
 const assert = require('node:assert/strict');
 const test = require('node:test');
 const { createApp, decodePubSubMessage, extractOrgId, validateOnboardOrgPayload } = require('../src/app');
+const { getGithubDispatchConfig, triggerGithubDispatch } = require('../src/githubDispatch');
 const { mapOrganizationToContractedOrg } = require('../src/organizationRepository');
 
 function listen(server) {
@@ -260,6 +261,70 @@ test('extracts orgid from data aliases and attributes', () => {
   assert.equal(extractOrgId({ data: { orgId: 'org-2' }, attributes: {} }), 'org-2');
   assert.equal(extractOrgId({ data: { org_id: 'org-3' }, attributes: {} }), 'org-3');
   assert.equal(extractOrgId({ data: {}, attributes: { orgid: 'org-4' } }), 'org-4');
+});
+
+test('GitHub dispatch config accepts either token environment variable', () => {
+  const originalGithubDispatchToken = process.env.GITHUB_DISPATCH_TOKEN;
+  const originalGhRepositoryDispatchToken = process.env.GH_REPOSITORY_DISPATCH_TOKEN;
+
+  try {
+    delete process.env.GITHUB_DISPATCH_TOKEN;
+    process.env.GH_REPOSITORY_DISPATCH_TOKEN = 'fallback-token';
+
+    const config = getGithubDispatchConfig();
+
+    assert.equal(config.token, 'fallback-token');
+    assert.equal(config.tokenEnv, 'GH_REPOSITORY_DISPATCH_TOKEN');
+  } finally {
+    if (originalGithubDispatchToken === undefined) {
+      delete process.env.GITHUB_DISPATCH_TOKEN;
+    } else {
+      process.env.GITHUB_DISPATCH_TOKEN = originalGithubDispatchToken;
+    }
+
+    if (originalGhRepositoryDispatchToken === undefined) {
+      delete process.env.GH_REPOSITORY_DISPATCH_TOKEN;
+    } else {
+      process.env.GH_REPOSITORY_DISPATCH_TOKEN = originalGhRepositoryDispatchToken;
+    }
+  }
+});
+
+test('GitHub dispatch reports missing token environment variables', async () => {
+  const originalGithubDispatchToken = process.env.GITHUB_DISPATCH_TOKEN;
+  const originalGhRepositoryDispatchToken = process.env.GH_REPOSITORY_DISPATCH_TOKEN;
+
+  try {
+    delete process.env.GITHUB_DISPATCH_TOKEN;
+    delete process.env.GH_REPOSITORY_DISPATCH_TOKEN;
+
+    await assert.rejects(
+      () => triggerGithubDispatch({ orgid: 'org-1' }),
+      (error) => {
+        assert.equal(error.message, 'GitHub dispatch token is not configured');
+        assert.equal(error.statusCode, 500);
+        assert.deepEqual(error.details.expectedEnvVars, [
+          'GITHUB_DISPATCH_TOKEN',
+          'GH_REPOSITORY_DISPATCH_TOKEN',
+        ]);
+        assert.equal(error.details.hasGithubDispatchToken, false);
+        assert.equal(error.details.hasGhRepositoryDispatchToken, false);
+        return true;
+      },
+    );
+  } finally {
+    if (originalGithubDispatchToken === undefined) {
+      delete process.env.GITHUB_DISPATCH_TOKEN;
+    } else {
+      process.env.GITHUB_DISPATCH_TOKEN = originalGithubDispatchToken;
+    }
+
+    if (originalGhRepositoryDispatchToken === undefined) {
+      delete process.env.GH_REPOSITORY_DISPATCH_TOKEN;
+    } else {
+      process.env.GH_REPOSITORY_DISPATCH_TOKEN = originalGhRepositoryDispatchToken;
+    }
+  }
 });
 
 test('payload validation reports missing required fields', () => {

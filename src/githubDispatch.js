@@ -2,10 +2,17 @@ const DEFAULT_REPOSITORY = 'javiyoconsulting-dotcom/maachwala-backoffice';
 const DEFAULT_EVENT_TYPE = 'apply-postgresql-ddl';
 
 function getGithubDispatchConfig() {
+  const token = process.env.GITHUB_DISPATCH_TOKEN || process.env.GH_REPOSITORY_DISPATCH_TOKEN;
+
   return {
     repository: process.env.GITHUB_DISPATCH_REPOSITORY || DEFAULT_REPOSITORY,
     eventType: process.env.GITHUB_DISPATCH_EVENT_TYPE || DEFAULT_EVENT_TYPE,
-    token: process.env.GITHUB_DISPATCH_TOKEN,
+    token,
+    tokenEnv: process.env.GITHUB_DISPATCH_TOKEN
+      ? 'GITHUB_DISPATCH_TOKEN'
+      : process.env.GH_REPOSITORY_DISPATCH_TOKEN
+        ? 'GH_REPOSITORY_DISPATCH_TOKEN'
+        : undefined,
   };
 }
 
@@ -16,7 +23,14 @@ async function triggerGithubDispatch(payload, options = {}) {
   };
 
   if (!config.token) {
-    throw Object.assign(new Error('GITHUB_DISPATCH_TOKEN is not configured'), { statusCode: 500 });
+    throw Object.assign(new Error('GitHub dispatch token is not configured'), {
+      statusCode: 500,
+      details: {
+        expectedEnvVars: ['GITHUB_DISPATCH_TOKEN', 'GH_REPOSITORY_DISPATCH_TOKEN'],
+        hasGithubDispatchToken: Boolean(process.env.GITHUB_DISPATCH_TOKEN),
+        hasGhRepositoryDispatchToken: Boolean(process.env.GH_REPOSITORY_DISPATCH_TOKEN),
+      },
+    });
   }
 
   const response = await fetch(`https://api.github.com/repos/${config.repository}/dispatches`, {
@@ -46,5 +60,6 @@ async function triggerGithubDispatch(payload, options = {}) {
 }
 
 module.exports = {
+  getGithubDispatchConfig,
   triggerGithubDispatch,
 };
