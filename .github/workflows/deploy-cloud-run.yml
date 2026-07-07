@@ -12,6 +12,9 @@ permissions:
 
 env:
   SERVICE_NAME: backoffice-microservice
+  GCP_PROJECT_ID: maachwala
+  GCP_PROJECT_NUMBER: "972943436476"
+  GCP_REGION: asia-south1
   PUBSUB_CREATE_DDL_SUBSCRIPTION: BACKOFFICE_CREATEORG_CREATEDDL-sub
 
 jobs:
@@ -35,8 +38,8 @@ jobs:
         run: |
           gcloud run deploy "$SERVICE_NAME" \
             --source . \
-            --project "${{ secrets.GCP_PROJECT_ID }}" \
-            --region "${{ secrets.GCP_REGION }}" \
+            --project "$GCP_PROJECT_ID" \
+            --region "$GCP_REGION" \
             --allow-unauthenticated \
             --set-env-vars "PGSSL=true,DATABASE_URL=${{ secrets.DATABASE_URL }},GITHUB_DISPATCH_TOKEN=${{ secrets.GH_REPOSITORY_DISPATCH_TOKEN }},GITHUB_DISPATCH_REPOSITORY=javiyoconsulting-dotcom/maachwala-backoffice,GITHUB_DISPATCH_EVENT_TYPE=apply-postgresql-ddl" \
             --quiet
@@ -44,11 +47,11 @@ jobs:
       - name: Connect Pub/Sub subscription to Cloud Run endpoint
         run: |
           SERVICE_URL="$(gcloud run services describe "$SERVICE_NAME" \
-            --project "${{ secrets.GCP_PROJECT_ID }}" \
-            --region "${{ secrets.GCP_REGION }}" \
+            --project "$GCP_PROJECT_ID" \
+            --region "$GCP_REGION" \
             --format 'value(status.url)')"
 
           gcloud pubsub subscriptions update "$PUBSUB_CREATE_DDL_SUBSCRIPTION" \
-            --project "${{ secrets.GCP_PROJECT_ID }}" \
+            --project "$GCP_PROJECT_ID" \
             --push-endpoint "$SERVICE_URL/backoffice/createddl/pubsub" \
             --quiet

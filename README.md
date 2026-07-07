@@ -26,14 +26,12 @@ $env:PORT=4000; npm start
 The service includes a `Dockerfile` and GitHub Actions workflow for Cloud Run. Configure these GitHub repository secrets before running `.github/workflows/deploy-cloud-run.yml`:
 
 ```text
-GCP_PROJECT_ID
-GCP_REGION
 GCP_WORKLOAD_IDENTITY_PROVIDER
 GCP_SERVICE_ACCOUNT
 DATABASE_URL
 ```
 
-The workflow deploys the service as `backoffice-microservice` and sets `PGSSL=true` automatically.
+The workflow deploys the service as `backoffice-microservice` to GCP project `maachwala` in Mumbai region `asia-south1`, and sets `PGSSL=true` automatically.
 
 For the Pub/Sub-triggered DDL service, also configure this GitHub repository secret before Cloud Run deployment:
 
@@ -44,6 +42,17 @@ GH_REPOSITORY_DISPATCH_TOKEN
 The token is injected into Cloud Run as `GITHUB_DISPATCH_TOKEN` and is used only to call GitHub `repository_dispatch`.
 
 ## Pub/Sub DDL Trigger
+
+Architecture:
+
+```text
+Pub/Sub topic BACKOFFICE_CREATEORG_CREATEDDL
+  -> subscription BACKOFFICE_CREATEORG_CREATEDDL-sub
+  -> Cloud Run POST /backoffice/createddl/pubsub
+  -> GitHub repository_dispatch event apply-postgresql-ddl
+  -> GitHub Actions workflow .github/workflows/terraform-postgresql-ddl.yml
+  -> Terraform runs terraform/postgresql/schema.sql against target PostgreSQL
+```
 
 Cloud Run endpoint:
 
@@ -73,6 +82,8 @@ repository_dispatch: apply-postgresql-ddl
 ```
 
 That starts `.github/workflows/terraform-postgresql-ddl.yml`, which runs the Terraform PostgreSQL DDL pipeline.
+
+The Terraform execution happens in GitHub Actions from the Git repo. Cloud Run only triggers the workflow.
 
 Recommended Pub/Sub message body before base64 encoding:
 
