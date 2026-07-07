@@ -190,10 +190,13 @@ async function handleCreateDdlPubSub(req, res, dispatchTerraformPipeline) {
     return;
   }
 
+  let pubSubEvent;
+  let orgid;
+
   try {
     const payload = await readJsonBody(req);
-    const pubSubEvent = decodePubSubMessage(payload);
-    const orgid = extractOrgId(pubSubEvent);
+    pubSubEvent = decodePubSubMessage(payload);
+    orgid = extractOrgId(pubSubEvent);
 
     await dispatchTerraformPipeline({
       source: 'pubsub',
@@ -212,6 +215,19 @@ async function handleCreateDdlPubSub(req, res, dispatchTerraformPipeline) {
       pubsubMessageId: pubSubEvent.messageId,
     });
   } catch (error) {
+    console.error(
+      JSON.stringify({
+        message: 'Failed to process /backoffice/createddl/pubsub request',
+        error: error.message,
+        statusCode: error.statusCode || 500,
+        details: error.details,
+        orgid,
+        pubsubMessageId: pubSubEvent && pubSubEvent.messageId,
+        subscription: pubSubEvent && pubSubEvent.subscription,
+        stack: error.stack,
+      }),
+    );
+
     sendJson(res, error.statusCode || 500, {
       error: error.statusCode ? error.message : 'Internal server error',
     });

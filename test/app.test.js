@@ -151,6 +151,9 @@ test('createddl Pub/Sub endpoint triggers Terraform dispatch', async () => {
 });
 
 test('createddl Pub/Sub endpoint rejects messages without orgid', async () => {
+  const originalConsoleError = console.error;
+  console.error = () => {};
+
   const server = createApp({
     async dispatchTerraformPipeline() {
       throw new Error('dispatch should not be called');
@@ -175,6 +178,52 @@ test('createddl Pub/Sub endpoint rejects messages without orgid', async () => {
     assert.equal(response.status, 400);
     assert.equal(body.error, 'Pub/Sub message must include orgid');
   } finally {
+    console.error = originalConsoleError;
+    server.close();
+  }
+});
+
+test('createddl Pub/Sub endpoint logs dispatch failures', async () => {
+  const originalConsoleError = console.error;
+  const logs = [];
+  console.error = (message) => logs.push(message);
+
+  const server = createApp({
+    async dispatchTerraformPipeline() {
+      throw Object.assign(new Error('dispatch failed'), {
+        statusCode: 502,
+        details: 'bad gateway from GitHub',
+      });
+    },
+  });
+  const port = await listen(server);
+
+  try {
+    const response = await fetch(`http://localhost:${port}/backoffice/createddl/pubsub`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        message: {
+          messageId: 'message-dispatch-failed',
+          data: Buffer.from(JSON.stringify({ orgid: 'org-500' })).toString('base64'),
+        },
+        subscription: 'BACKOFFICE_CREATEORG_CREATEDDL-sub',
+      }),
+    });
+
+    const body = await response.json();
+    const log = JSON.parse(logs[0]);
+
+    assert.equal(response.status, 502);
+    assert.equal(body.error, 'dispatch failed');
+    assert.equal(log.message, 'Failed to process /backoffice/createddl/pubsub request');
+    assert.equal(log.error, 'dispatch failed');
+    assert.equal(log.statusCode, 502);
+    assert.equal(log.details, 'bad gateway from GitHub');
+    assert.equal(log.orgid, 'org-500');
+    assert.equal(log.pubsubMessageId, 'message-dispatch-failed');
+  } finally {
+    console.error = originalConsoleError;
     server.close();
   }
 });
