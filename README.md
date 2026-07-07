@@ -89,10 +89,13 @@ Recommended Pub/Sub message body before base64 encoding:
 
 ```json
 {
+  "orgid": "org-123",
   "reason": "createorg-ddl-requested",
   "requestedBy": "backoffice"
 }
 ```
+
+`orgid` is required. The service also accepts `orgId` or `org_id`, and it can be provided either inside the decoded message data or as a Pub/Sub attribute. The Cloud Run service passes this value to GitHub Actions as `client_payload.orgid`; the Terraform workflow exposes it as `TF_VAR_org_id`.
 
 ## PostgreSQL
 

@@ -28,6 +28,7 @@ jobs:
 
     env:
       TF_VAR_database_url: ${{ secrets.DATABASE_URL }}
+      TF_VAR_org_id: ${{ github.event.client_payload.orgid || '' }}
 
     steps:
       - name: Checkout

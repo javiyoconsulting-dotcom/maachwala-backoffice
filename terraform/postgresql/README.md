@@ -10,6 +10,12 @@ TF_VAR_database_url=postgresql://postgres.ofqhwumptcehlzialsjg:PASSWORD@aws-1-ap
 
 Keep the real value in GitHub Actions secrets or a local environment variable. Do not commit it.
 
+When the workflow is triggered by Cloud Run through GitHub `repository_dispatch`, the Pub/Sub `orgid` is passed to Terraform as:
+
+```text
+TF_VAR_org_id
+```
+
 ## Run Locally
 
 ```bash

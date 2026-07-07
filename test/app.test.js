@@ -1,6 +1,6 @@
 const assert = require('node:assert/strict');
 const test = require('node:test');
-const { createApp, decodePubSubMessage, validateOnboardOrgPayload } = require('../src/app');
+const { createApp, decodePubSubMessage, extractOrgId, validateOnboardOrgPayload } = require('../src/app');
 const { mapOrganizationToContractedOrg } = require('../src/organizationRepository');
 
 function listen(server) {
@@ -117,7 +117,7 @@ test('createddl Pub/Sub endpoint triggers Terraform dispatch', async () => {
           attributes: {
             reason: 'createorg-ddl',
           },
-          data: Buffer.from(JSON.stringify({ requestedBy: 'pubsub-test' })).toString('base64'),
+          data: Buffer.from(JSON.stringify({ orgid: 'org-123', requestedBy: 'pubsub-test' })).toString('base64'),
         },
         subscription: 'BACKOFFICE_CREATEORG_CREATEDDL-sub',
       }),
@@ -127,21 +127,53 @@ test('createddl Pub/Sub endpoint triggers Terraform dispatch', async () => {
 
     assert.equal(response.status, 202);
     assert.equal(body.message, 'Terraform DDL pipeline trigger accepted');
+    assert.equal(body.orgid, 'org-123');
     assert.deepEqual(dispatches, [
       {
         source: 'pubsub',
         topic: 'BACKOFFICE_CREATEORG_CREATEDDL',
         subscription: 'BACKOFFICE_CREATEORG_CREATEDDL-sub',
+        orgid: 'org-123',
         messageId: 'message-1',
         publishTime: '2026-07-07T00:00:00Z',
         attributes: {
           reason: 'createorg-ddl',
         },
         data: {
+          orgid: 'org-123',
           requestedBy: 'pubsub-test',
         },
       },
     ]);
+  } finally {
+    server.close();
+  }
+});
+
+test('createddl Pub/Sub endpoint rejects messages without orgid', async () => {
+  const server = createApp({
+    async dispatchTerraformPipeline() {
+      throw new Error('dispatch should not be called');
+    },
+  });
+  const port = await listen(server);
+
+  try {
+    const response = await fetch(`http://localhost:${port}/backoffice/createddl/pubsub`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        message: {
+          messageId: 'message-missing-org',
+          data: Buffer.from(JSON.stringify({ requestedBy: 'pubsub-test' })).toString('base64'),
+        },
+      }),
+    });
+
+    const body = await response.json();
+
+    assert.equal(response.status, 400);
+    assert.equal(body.error, 'Pub/Sub message must include orgid');
   } finally {
     server.close();
   }
@@ -165,6 +197,13 @@ test('decodes Pub/Sub message data as JSON when possible', () => {
     },
     subscription: 'BACKOFFICE_CREATEORG_CREATEDDL-sub',
   });
+});
+
+test('extracts orgid from data aliases and attributes', () => {
+  assert.equal(extractOrgId({ data: { orgid: 'org-1' }, attributes: {} }), 'org-1');
+  assert.equal(extractOrgId({ data: { orgId: 'org-2' }, attributes: {} }), 'org-2');
+  assert.equal(extractOrgId({ data: { org_id: 'org-3' }, attributes: {} }), 'org-3');
+  assert.equal(extractOrgId({ data: {}, attributes: { orgid: 'org-4' } }), 'org-4');
 });
 
 test('payload validation reports missing required fields', () => {

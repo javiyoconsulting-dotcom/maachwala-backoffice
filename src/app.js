@@ -171,6 +171,18 @@ function decodePubSubMessage(pubSubBody) {
   };
 }
 
+function extractOrgId(pubSubEvent) {
+  const data = pubSubEvent.data && typeof pubSubEvent.data === 'object' ? pubSubEvent.data : {};
+  const attributes = pubSubEvent.attributes || {};
+  const orgid = data.orgid || data.orgId || data.org_id || attributes.orgid || attributes.orgId || attributes.org_id;
+
+  if (orgid === undefined || orgid === null || String(orgid).trim().length === 0) {
+    throw Object.assign(new Error('Pub/Sub message must include orgid'), { statusCode: 400 });
+  }
+
+  return String(orgid).trim();
+}
+
 async function handleCreateDdlPubSub(req, res, dispatchTerraformPipeline) {
   const contentType = req.headers['content-type'] || '';
   if (!contentType.includes('application/json')) {
@@ -181,11 +193,13 @@ async function handleCreateDdlPubSub(req, res, dispatchTerraformPipeline) {
   try {
     const payload = await readJsonBody(req);
     const pubSubEvent = decodePubSubMessage(payload);
+    const orgid = extractOrgId(pubSubEvent);
 
     await dispatchTerraformPipeline({
       source: 'pubsub',
       topic: 'BACKOFFICE_CREATEORG_CREATEDDL',
       subscription: pubSubEvent.subscription || 'BACKOFFICE_CREATEORG_CREATEDDL-sub',
+      orgid,
       messageId: pubSubEvent.messageId,
       publishTime: pubSubEvent.publishTime,
       attributes: pubSubEvent.attributes,
@@ -194,6 +208,7 @@ async function handleCreateDdlPubSub(req, res, dispatchTerraformPipeline) {
 
     sendJson(res, 202, {
       message: 'Terraform DDL pipeline trigger accepted',
+      orgid,
       pubsubMessageId: pubSubEvent.messageId,
     });
   } catch (error) {
@@ -237,6 +252,7 @@ function createApp(options = {}) {
 module.exports = {
   createApp,
   decodePubSubMessage,
+  extractOrgId,
   validateOnboardOrgPayload,
   normalizeOrganizationPayload,
 };
