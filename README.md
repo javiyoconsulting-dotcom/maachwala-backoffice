@@ -90,12 +90,27 @@ Recommended Pub/Sub message body before base64 encoding:
 ```json
 {
   "orgid": "org-123",
+  "schemaName": "trawlerowner_demo1",
   "reason": "createorg-ddl-requested",
   "requestedBy": "backoffice"
 }
 ```
 
 `orgid` is required. The service also accepts `orgId` or `org_id`, and it can be provided either inside the decoded message data or as a Pub/Sub attribute. The Cloud Run service passes this value to GitHub Actions as `client_payload.orgid`; the Terraform workflow exposes it as `TF_VAR_org_id`.
+
+`schemaName` is the PostgreSQL schema Terraform should create. The service also accepts `schema_name`, `schemaname`, or `schema`, either in the decoded message data or Pub/Sub attributes. If no schema field is provided, the service falls back to `orgid` only when that value is a valid PostgreSQL identifier. Valid schema names must match `^[A-Za-z_][A-Za-z0-9_]{0,62}$`, so use underscores instead of hyphens.
+
+When `schemaName` starts with `trawlerowner`, Terraform creates the schema and these tables inside it:
+
+```text
+auction
+auctiondetails
+group
+journeycost
+journeyinfo
+journeyledger
+trawlermaster
+```
 
 ## PostgreSQL
 

@@ -1,6 +1,12 @@
 const assert = require('node:assert/strict');
 const test = require('node:test');
-const { createApp, decodePubSubMessage, extractOrgId, validateOnboardOrgPayload } = require('../src/app');
+const {
+  createApp,
+  decodePubSubMessage,
+  extractOrgId,
+  extractSchemaName,
+  validateOnboardOrgPayload,
+} = require('../src/app');
 const { getGithubDispatchConfig, triggerGithubDispatch } = require('../src/githubDispatch');
 const { mapOrganizationToContractedOrg } = require('../src/organizationRepository');
 
@@ -118,7 +124,11 @@ test('createddl Pub/Sub endpoint triggers Terraform dispatch', async () => {
           attributes: {
             reason: 'createorg-ddl',
           },
-          data: Buffer.from(JSON.stringify({ orgid: 'org-123', requestedBy: 'pubsub-test' })).toString('base64'),
+          data: Buffer.from(JSON.stringify({
+            orgid: 'org-123',
+            schemaName: 'trawlerowner_demo1',
+            requestedBy: 'pubsub-test',
+          })).toString('base64'),
         },
         subscription: 'BACKOFFICE_CREATEORG_CREATEDDL-sub',
       }),
@@ -129,12 +139,14 @@ test('createddl Pub/Sub endpoint triggers Terraform dispatch', async () => {
     assert.equal(response.status, 202);
     assert.equal(body.message, 'Terraform DDL pipeline trigger accepted');
     assert.equal(body.orgid, 'org-123');
+    assert.equal(body.schemaName, 'trawlerowner_demo1');
     assert.deepEqual(dispatches, [
       {
         source: 'pubsub',
         topic: 'BACKOFFICE_CREATEORG_CREATEDDL',
         subscription: 'BACKOFFICE_CREATEORG_CREATEDDL-sub',
         orgid: 'org-123',
+        schemaName: 'trawlerowner_demo1',
         messageId: 'message-1',
         publishTime: '2026-07-07T00:00:00Z',
         attributes: {
@@ -142,6 +154,7 @@ test('createddl Pub/Sub endpoint triggers Terraform dispatch', async () => {
         },
         data: {
           orgid: 'org-123',
+          schemaName: 'trawlerowner_demo1',
           requestedBy: 'pubsub-test',
         },
       },
@@ -206,7 +219,10 @@ test('createddl Pub/Sub endpoint logs dispatch failures', async () => {
       body: JSON.stringify({
         message: {
           messageId: 'message-dispatch-failed',
-          data: Buffer.from(JSON.stringify({ orgid: 'org-500' })).toString('base64'),
+          data: Buffer.from(JSON.stringify({
+            orgid: 'org-500',
+            schemaName: 'trawlerowner_failure',
+          })).toString('base64'),
         },
         subscription: 'BACKOFFICE_CREATEORG_CREATEDDL-sub',
       }),
@@ -229,6 +245,7 @@ test('createddl Pub/Sub endpoint logs dispatch failures', async () => {
     assert.equal(log.error.details, 'bad gateway from GitHub');
     assert.equal(typeof log.error.stack, 'string');
     assert.equal(log.orgid, 'org-500');
+    assert.equal(log.schemaName, 'trawlerowner_failure');
     assert.equal(log.pubsubMessageId, 'message-dispatch-failed');
   } finally {
     console.error = originalConsoleError;
@@ -261,6 +278,50 @@ test('extracts orgid from data aliases and attributes', () => {
   assert.equal(extractOrgId({ data: { orgId: 'org-2' }, attributes: {} }), 'org-2');
   assert.equal(extractOrgId({ data: { org_id: 'org-3' }, attributes: {} }), 'org-3');
   assert.equal(extractOrgId({ data: {}, attributes: { orgid: 'org-4' } }), 'org-4');
+});
+
+test('extracts schemaName from data aliases, attributes, or orgid fallback', () => {
+  assert.equal(extractSchemaName({ data: { schemaName: 'trawlerowner_1' }, attributes: {} }), 'trawlerowner_1');
+  assert.equal(extractSchemaName({ data: { schema_name: 'trawlerowner_2' }, attributes: {} }), 'trawlerowner_2');
+  assert.equal(extractSchemaName({ data: { schemaname: 'trawlerowner_3' }, attributes: {} }), 'trawlerowner_3');
+  assert.equal(extractSchemaName({ data: {}, attributes: { schema: 'trawlerowner_4' } }), 'trawlerowner_4');
+  assert.equal(extractSchemaName({ data: {}, attributes: {} }, 'trawlerowner_5'), 'trawlerowner_5');
+});
+
+test('createddl Pub/Sub endpoint rejects invalid schemaName', async () => {
+  const originalConsoleError = console.error;
+  console.error = () => {};
+
+  const server = createApp({
+    async dispatchTerraformPipeline() {
+      throw new Error('dispatch should not be called');
+    },
+  });
+  const port = await listen(server);
+
+  try {
+    const response = await fetch(`http://localhost:${port}/backoffice/createddl/pubsub`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        message: {
+          messageId: 'message-invalid-schema',
+          data: Buffer.from(JSON.stringify({
+            orgid: 'org-123',
+            schemaName: 'trawlerowner-bad',
+          })).toString('base64'),
+        },
+      }),
+    });
+
+    const body = await response.json();
+
+    assert.equal(response.status, 400);
+    assert.equal(body.error, 'Pub/Sub message schemaName must be a valid PostgreSQL identifier');
+  } finally {
+    console.error = originalConsoleError;
+    server.close();
+  }
 });
 
 test('GitHub dispatch config accepts either token environment variable', () => {

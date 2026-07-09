@@ -183,6 +183,45 @@ function extractOrgId(pubSubEvent) {
   return String(orgid).trim();
 }
 
+function isPostgresIdentifier(value) {
+  return /^[A-Za-z_][A-Za-z0-9_]{0,62}$/.test(value);
+}
+
+function extractSchemaName(pubSubEvent, fallbackOrgId) {
+  const data = pubSubEvent.data && typeof pubSubEvent.data === 'object' ? pubSubEvent.data : {};
+  const attributes = pubSubEvent.attributes || {};
+  const schemaName = data.schemaName
+    || data.schema_name
+    || data.schemaname
+    || data.schema
+    || attributes.schemaName
+    || attributes.schema_name
+    || attributes.schemaname
+    || attributes.schema
+    || fallbackOrgId;
+
+  if (schemaName === undefined || schemaName === null || String(schemaName).trim().length === 0) {
+    throw Object.assign(new Error('Pub/Sub message must include schemaName'), { statusCode: 400 });
+  }
+
+  const normalizedSchemaName = String(schemaName).trim();
+
+  if (!isPostgresIdentifier(normalizedSchemaName)) {
+    throw Object.assign(
+      new Error('Pub/Sub message schemaName must be a valid PostgreSQL identifier'),
+      {
+        statusCode: 400,
+        details: {
+          allowedPattern: '^[A-Za-z_][A-Za-z0-9_]{0,62}$',
+          received: normalizedSchemaName,
+        },
+      },
+    );
+  }
+
+  return normalizedSchemaName;
+}
+
 function serializeError(error) {
   return {
     name: error.name,
@@ -211,17 +250,20 @@ async function handleCreateDdlPubSub(req, res, dispatchTerraformPipeline) {
 
   let pubSubEvent;
   let orgid;
+  let schemaName;
 
   try {
     const payload = await readJsonBody(req);
     pubSubEvent = decodePubSubMessage(payload);
     orgid = extractOrgId(pubSubEvent);
+    schemaName = extractSchemaName(pubSubEvent, orgid);
 
     await dispatchTerraformPipeline({
       source: 'pubsub',
       topic: 'BACKOFFICE_CREATEORG_CREATEDDL',
       subscription: pubSubEvent.subscription || 'BACKOFFICE_CREATEORG_CREATEDDL-sub',
       orgid,
+      schemaName,
       messageId: pubSubEvent.messageId,
       publishTime: pubSubEvent.publishTime,
       attributes: pubSubEvent.attributes,
@@ -231,6 +273,7 @@ async function handleCreateDdlPubSub(req, res, dispatchTerraformPipeline) {
     sendJson(res, 202, {
       message: 'Terraform DDL pipeline trigger accepted',
       orgid,
+      schemaName,
       pubsubMessageId: pubSubEvent.messageId,
     });
   } catch (error) {
@@ -240,6 +283,7 @@ async function handleCreateDdlPubSub(req, res, dispatchTerraformPipeline) {
       message: 'Failed to process /backoffice/createddl/pubsub request',
       error: serializeError(error),
       orgid,
+      schemaName,
       pubsubMessageId: pubSubEvent && pubSubEvent.messageId,
       subscription: pubSubEvent && pubSubEvent.subscription,
     };
@@ -290,6 +334,7 @@ module.exports = {
   createApp,
   decodePubSubMessage,
   extractOrgId,
+  extractSchemaName,
   serializeError,
   validateOnboardOrgPayload,
   normalizeOrganizationPayload,

@@ -16,11 +16,29 @@ When the workflow is triggered by Cloud Run through GitHub `repository_dispatch`
 TF_VAR_org_id
 ```
 
+The Pub/Sub schema name is passed to Terraform as:
+
+```text
+TF_VAR_schema_name
+```
+
+`schema_name` must be a valid PostgreSQL identifier matching `^[A-Za-z_][A-Za-z0-9_]{0,62}$`. The SQL always keeps the shared `core.contractedorg` DDL up to date. When `schema_name` is provided, it creates that schema. When the schema name starts with `trawlerowner`, it also creates:
+
+```text
+auction
+auctiondetails
+group
+journeycost
+journeyinfo
+journeyledger
+trawlermaster
+```
+
 ## Run Locally
 
 ```bash
 terraform init
-terraform apply
+terraform apply -var="schema_name=trawlerowner_demo1"
 ```
 
 ## Pipeline

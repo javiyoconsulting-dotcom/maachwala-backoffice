@@ -15,6 +15,11 @@ on:
       - "terraform/postgresql/**"
       - ".github/workflows/terraform-postgresql-ddl.yml"
   workflow_dispatch:
+    inputs:
+      schema_name:
+        description: "PostgreSQL schema name to create, for example trawlerowner_demo1"
+        required: false
+        type: string
 
 permissions:
   contents: read
@@ -29,6 +34,7 @@ jobs:
     env:
       TF_VAR_database_url: ${{ secrets.DATABASE_URL }}
       TF_VAR_org_id: ${{ github.event.client_payload.orgid || '' }}
+      TF_VAR_schema_name: ${{ github.event.inputs.schema_name || github.event.client_payload.schemaName || github.event.client_payload.schema_name || github.event.client_payload.schemaname || github.event.client_payload.schema || github.event.client_payload.orgid || '' }}
 
     steps:
       - name: Checkout
