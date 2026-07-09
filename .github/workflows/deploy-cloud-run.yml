@@ -41,7 +41,7 @@ jobs:
             --project "$GCP_PROJECT_ID" \
             --region "$GCP_REGION" \
             --allow-unauthenticated \
-            --set-env-vars "PGSSL=true,DATABASE_URL=${{ secrets.DATABASE_URL }},GITHUB_DISPATCH_TOKEN=${{ secrets.GH_REPOSITORY_DISPATCH_TOKEN }},GH_REPOSITORY_DISPATCH_TOKEN=${{ secrets.GH_REPOSITORY_DISPATCH_TOKEN }},GITHUB_DISPATCH_REPOSITORY=javiyoconsulting-dotcom/maachwala-backoffice,GITHUB_DISPATCH_EVENT_TYPE=apply-postgresql-ddl" \
+            --set-env-vars "PGSSL=true,DATABASE_URL=${{ secrets.DATABASE_URL }},GH_DISPATCH_TOKEN=${{ secrets.GH_DISPATCH_TOKEN }},GITHUB_DISPATCH_REPOSITORY=javiyoconsulting-dotcom/maachwala-backoffice,GITHUB_DISPATCH_EVENT_TYPE=apply-postgresql-ddl" \
             --quiet
 
       - name: Connect Pub/Sub subscription to Cloud Run endpoint

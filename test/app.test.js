@@ -325,18 +325,26 @@ test('createddl Pub/Sub endpoint rejects invalid schemaName', async () => {
 });
 
 test('GitHub dispatch config accepts either token environment variable', () => {
+  const originalGhDispatchToken = process.env.GH_DISPATCH_TOKEN;
   const originalGithubDispatchToken = process.env.GITHUB_DISPATCH_TOKEN;
   const originalGhRepositoryDispatchToken = process.env.GH_REPOSITORY_DISPATCH_TOKEN;
 
   try {
+    process.env.GH_DISPATCH_TOKEN = 'primary-token';
     delete process.env.GITHUB_DISPATCH_TOKEN;
     process.env.GH_REPOSITORY_DISPATCH_TOKEN = 'fallback-token';
 
     const config = getGithubDispatchConfig();
 
-    assert.equal(config.token, 'fallback-token');
-    assert.equal(config.tokenEnv, 'GH_REPOSITORY_DISPATCH_TOKEN');
+    assert.equal(config.token, 'primary-token');
+    assert.equal(config.tokenEnv, 'GH_DISPATCH_TOKEN');
   } finally {
+    if (originalGhDispatchToken === undefined) {
+      delete process.env.GH_DISPATCH_TOKEN;
+    } else {
+      process.env.GH_DISPATCH_TOKEN = originalGhDispatchToken;
+    }
+
     if (originalGithubDispatchToken === undefined) {
       delete process.env.GITHUB_DISPATCH_TOKEN;
     } else {
@@ -352,10 +360,12 @@ test('GitHub dispatch config accepts either token environment variable', () => {
 });
 
 test('GitHub dispatch reports missing token environment variables', async () => {
+  const originalGhDispatchToken = process.env.GH_DISPATCH_TOKEN;
   const originalGithubDispatchToken = process.env.GITHUB_DISPATCH_TOKEN;
   const originalGhRepositoryDispatchToken = process.env.GH_REPOSITORY_DISPATCH_TOKEN;
 
   try {
+    delete process.env.GH_DISPATCH_TOKEN;
     delete process.env.GITHUB_DISPATCH_TOKEN;
     delete process.env.GH_REPOSITORY_DISPATCH_TOKEN;
 
@@ -365,15 +375,23 @@ test('GitHub dispatch reports missing token environment variables', async () => 
         assert.equal(error.message, 'GitHub dispatch token is not configured');
         assert.equal(error.statusCode, 500);
         assert.deepEqual(error.details.expectedEnvVars, [
+          'GH_DISPATCH_TOKEN',
           'GITHUB_DISPATCH_TOKEN',
           'GH_REPOSITORY_DISPATCH_TOKEN',
         ]);
+        assert.equal(error.details.hasGhDispatchToken, false);
         assert.equal(error.details.hasGithubDispatchToken, false);
         assert.equal(error.details.hasGhRepositoryDispatchToken, false);
         return true;
       },
     );
   } finally {
+    if (originalGhDispatchToken === undefined) {
+      delete process.env.GH_DISPATCH_TOKEN;
+    } else {
+      process.env.GH_DISPATCH_TOKEN = originalGhDispatchToken;
+    }
+
     if (originalGithubDispatchToken === undefined) {
       delete process.env.GITHUB_DISPATCH_TOKEN;
     } else {

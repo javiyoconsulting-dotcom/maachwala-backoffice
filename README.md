@@ -36,10 +36,10 @@ The workflow deploys the service as `backoffice-microservice` to GCP project `ma
 For the Pub/Sub-triggered DDL service, also configure this GitHub repository secret before Cloud Run deployment:
 
 ```text
-GH_REPOSITORY_DISPATCH_TOKEN
+GH_DISPATCH_TOKEN
 ```
 
-The token is injected into Cloud Run as `GITHUB_DISPATCH_TOKEN` and is used only to call GitHub `repository_dispatch`.
+The token is injected into Cloud Run as `GH_DISPATCH_TOKEN` and is used only to call GitHub `repository_dispatch`.
 
 ## Pub/Sub DDL Trigger
 
